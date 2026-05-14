@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+*.sqlite3
+
+# Node
+node_modules/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+*.env.local
+
+# Media uploads
+backend/media/avatars/
+backend/media/characters/
+
+# OS
+.DS_Store
+Thumbs.db
