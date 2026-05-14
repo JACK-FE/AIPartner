@@ -33,7 +33,7 @@ class EmailTokenObtainSerializer(TokenObtainSerializer):
         }
         self.user = authenticate(**authenticate_kwargs)
         if self.user is None:
-            raise serializers.ValidationError("Invalid email or password")
+            raise serializers.ValidationError("用户名或密码错误")
         refresh = RefreshToken.for_user(self.user)
         return {
             "access": str(refresh.access_token),

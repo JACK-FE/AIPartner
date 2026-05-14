@@ -1,6 +1,8 @@
 from django.db import models
 from django.conf import settings
 
+from config.crypto import EncryptedCharField
+
 SYSTEM_PROMPT_TEMPLATE = """You are an AI friend named {name}.
 Personality: {personality}
 In conversation, be friendly, warm, and natural. Respond as a close friend would."""
@@ -9,7 +11,7 @@ In conversation, be friendly, warm, and natural. Respond as a close friend would
 class ModelConfig(models.Model):
     provider = models.CharField(max_length=32)
     model_name = models.CharField(max_length=64)
-    api_key = models.CharField(max_length=512)
+    api_key = EncryptedCharField(max_length=512)
     api_base_url = models.CharField(max_length=256, blank=True, default="")
     is_active = models.BooleanField(default=True)
     sort_order = models.IntegerField(default=0)

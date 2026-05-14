@@ -6,6 +6,9 @@
         <div style="font-weight: 600;">{{ character.name }}</div>
         <n-text depth="3" style="font-size: 12px;">{{ character.model_name }}</n-text>
       </div>
+      <n-button v-if="voice.supported.value" size="small" @click="voice.toggle()">
+        {{ voice.enabled.value ? '🔊' : '🔇' }}
+      </n-button>
       <n-button size="small" :type="character.is_followed ? 'primary' : 'default'" @click="toggleFollow">
         {{ character.is_followed ? '已关注' : '关注' }}
       </n-button>
@@ -30,10 +33,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import { charactersApi } from '../api/characters'
+import { useVoice } from '../composables/useVoice'
 import type { AICharacter } from '../types'
 
 import { NAvatar, NButton, NInput, NSpin, NText, useMessage } from 'naive-ui'
@@ -45,6 +49,7 @@ const character = ref<AICharacter | null>(null)
 const inputText = ref('')
 const msgContainer = ref<HTMLElement | null>(null)
 const characterId = Number(route.params.id)
+const voice = useVoice()
 
 async function toggleFollow() {
   if (!character.value) return
@@ -67,6 +72,7 @@ async function sendMessage() {
   const content = inputText.value.trim()
   if (!content || chatStore.streaming) return
   inputText.value = ''
+  voice.stop()
 
   chatStore.addMessage({ id: Date.now(), role: 'user', content, created_at: new Date().toISOString() })
   chatStore.streaming = true
@@ -103,6 +109,7 @@ async function sendMessage() {
             const data = JSON.parse(line.slice(6))
             if (data.token) {
               chatStore.appendToLastMessage(data.token)
+              voice.feedToken(data.token)
             }
             if (data.message_id) {
               chatStore.updateLastMessageId(data.message_id)
@@ -117,6 +124,7 @@ async function sendMessage() {
     message.error('发送失败')
   } finally {
     chatStore.streaming = false
+    voice.flush()
     scrollToBottom()
   }
 }
@@ -138,5 +146,9 @@ onMounted(async () => {
   }
   await chatStore.fetchMessages(characterId)
   scrollToBottom()
+})
+
+onUnmounted(() => {
+  voice.stop()
 })
 </script>
