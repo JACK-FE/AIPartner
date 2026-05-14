@@ -2,6 +2,8 @@
 
 一个 AI 好友聊天社区平台。用户可以创建、定制 AI 虚拟角色，浏览公开角色，关注并与之聊天。
 
+> [English Version](./README.en.md)
+
 ## 技术栈
 
 - **前端**: Vue 3 + TypeScript + Naive UI + Pinia + Vue Router
