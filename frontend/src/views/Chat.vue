@@ -36,7 +36,7 @@
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useChatStore } from '../stores/chat'
-import { charactersApi } from '../api/characters'
+import { charactersApi, ttsApi } from '../api/characters'
 import { useVoice } from '../composables/useVoice'
 import type { AICharacter } from '../types'
 
@@ -109,7 +109,6 @@ async function sendMessage() {
             const data = JSON.parse(line.slice(6))
             if (data.token) {
               chatStore.appendToLastMessage(data.token)
-              voice.feedToken(data.token)
             }
             if (data.message_id) {
               chatStore.updateLastMessageId(data.message_id)
@@ -124,7 +123,15 @@ async function sendMessage() {
     message.error('发送失败')
   } finally {
     chatStore.streaming = false
-    voice.flush()
+    if (voice.enabled.value && character.value) {
+      try {
+        const fullText = chatStore.messages.filter(m => m.role === 'assistant').pop()?.content || ''
+        if (fullText) {
+          const { data } = await ttsApi.synthesize(characterId, fullText)
+          voice.playAudio(data.audio_url)
+        }
+      } catch { /* TTS failed silently */ }
+    }
     scrollToBottom()
   }
 }

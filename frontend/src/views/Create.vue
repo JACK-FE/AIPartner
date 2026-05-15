@@ -63,6 +63,36 @@
         <n-form-item label="模型" path="model">
           <n-select v-model:value="form.model" :options="modelOptions" placeholder="选择模型" />
         </n-form-item>
+        <n-form-item label="音色">
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; width: 100%;">
+            <div
+              v-for="p in voicePresets"
+              :key="p.key"
+              @click="form.voice_preset = p.key"
+              :style="{
+                cursor: 'pointer',
+                padding: '8px 6px',
+                borderRadius: '8px',
+                border: form.voice_preset === p.key ? '3px solid #18a058' : '3px solid transparent',
+                background: form.voice_preset === p.key ? '#f0faf4' : '#fafafa',
+                textAlign: 'center',
+                transition: 'all 0.2s',
+              }"
+            >
+              <div style="font-size: 14px;">{{ p.gender === 'female' ? '♀' : '♂' }} {{ p.label }}</div>
+              <div style="font-size: 11px; color: #999; margin: 2px 0;">{{ p.description }}</div>
+              <n-button
+                size="tiny"
+                quaternary
+                @click.stop="previewVoice(p.key)"
+                :loading="previewingKey === p.key"
+                style="margin-top: 4px;"
+              >
+                {{ previewingKey === p.key ? '...' : '🔊' }}
+              </n-button>
+            </div>
+          </div>
+        </n-form-item>
         <n-form-item label="公开">
           <n-switch v-model:value="form.is_public" />
           <n-text style="margin-left: 8px;" depth="3">{{ form.is_public ? '公开 - 所有人可见' : '私密 - 仅自己可见' }}</n-text>
@@ -84,6 +114,8 @@ import { charactersApi } from '../api/characters'
 import client from '../api/client'
 
 import type { AICharacter } from '../types'
+import { VOICE_PRESETS, DEFAULT_VOICE_PRESET } from '../constants/voicePresets'
+import { ttsApi } from '../api/characters'
 import { NCard, NH2, NModal, NForm, NFormItem, NInput, NSelect, NSwitch, NButton, NAvatar, NIcon, NText, NDivider, NEmpty, useMessage } from 'naive-ui'
 import { AddOutline, CloudUploadOutline, CloseOutline } from '@vicons/ionicons5'
 
@@ -95,6 +127,9 @@ const showCreateModal = ref(false)
 
 const charAvatarInput = ref<HTMLInputElement | null>(null)
 const customAvatarPreview = ref('')
+
+const voicePresets = VOICE_PRESETS
+const previewingKey = ref<string | null>(null)
 
 const avatars = [
   'https://api.dicebear.com/9.x/bottts/svg?seed=friend1',
@@ -114,6 +149,7 @@ const form = ref({
   avatar: avatars[0],
   description: '',
   personality: '',
+  voice_preset: DEFAULT_VOICE_PRESET,
   model: null as number | null,
   is_public: true,
 })
@@ -160,7 +196,7 @@ async function handleCreate() {
     await charactersApi.create({ ...form.value, avatar: avatarUrl } as any)
     message.success('创建成功')
     showCreateModal.value = false
-    form.value = { name: '', avatar: avatars[0], description: '', personality: '', model: null, is_public: true }
+    form.value = { name: '', avatar: avatars[0], description: '', personality: '', voice_preset: DEFAULT_VOICE_PRESET, model: null, is_public: true }
     customAvatarPreview.value = ''
     await store.fetchMine()
   } catch (err: any) {
@@ -187,10 +223,29 @@ function editCharacter(c: AICharacter) {
     avatar: c.avatar || avatars[0],
     description: c.description || '',
     personality: c.personality || '',
+    voice_preset: c.voice_preset || DEFAULT_VOICE_PRESET,
     model: null,
     is_public: c.is_public,
   }
   message.info('编辑功能可复用创建表单，当前仅预填数据')
+}
+
+async function previewVoice(presetKey: string) {
+  if (previewingKey.value) return
+  previewingKey.value = presetKey
+  try {
+    const { data } = await ttsApi.preview(presetKey, '你好，我是你的AI好友')
+    const audio = new Audio(data.audio_url)
+    audio.play()
+    await new Promise<void>((resolve) => {
+      audio.onended = () => resolve()
+      audio.onerror = () => resolve()
+    })
+  } catch {
+    message.warning('试听失败，请稍后重试')
+  } finally {
+    previewingKey.value = null
+  }
 }
 
 onMounted(async () => {

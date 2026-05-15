@@ -8,6 +8,8 @@ from .views import (
     FollowDeleteView,
     FollowListView,
     CharacterAvatarUploadView,
+    CharacterTTSView,
+    TTSPreviewView,
 )
 
 urlpatterns = [
@@ -19,4 +21,6 @@ urlpatterns = [
     path("characters/<int:character_id>/unfollow/", FollowDeleteView.as_view(), name="unfollow"),
     path("follows/", FollowListView.as_view(), name="follow-list"),
     path("characters/avatar/upload/", CharacterAvatarUploadView.as_view(), name="character-avatar-upload"),
+    path("characters/<int:character_id>/tts/", CharacterTTSView.as_view(), name="character-tts"),
+    path("tts/preview/", TTSPreviewView.as_view(), name="tts-preview"),
 ]

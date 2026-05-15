@@ -11,7 +11,7 @@ export const charactersApi = {
   get(id: number) {
     return client.get<AICharacter>(`/characters/${id}/`)
   },
-  create(data: { name: string; avatar?: string; description?: string; personality?: string; model: number; is_public?: boolean }) {
+  create(data: { name: string; avatar?: string; description?: string; personality?: string; voice_preset?: string; model: number; is_public?: boolean }) {
     return client.post<AICharacter>('/characters/', data)
   },
   update(id: number, data: Partial<AICharacter>) {
@@ -31,5 +31,14 @@ export const charactersApi = {
   },
   models() {
     return client.get<ModelConfig[]>('/models/')
+  },
+}
+
+export const ttsApi = {
+  synthesize(characterId: number, text: string) {
+    return client.post<{ audio_url: string }>(`/characters/${characterId}/tts/`, { text })
+  },
+  preview(voicePreset: string, text: string) {
+    return client.post<{ audio_url: string }>('/tts/preview/', { voice_preset: voicePreset, text })
   },
 }

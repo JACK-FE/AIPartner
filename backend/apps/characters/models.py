@@ -37,6 +37,7 @@ class AICharacter(models.Model):
     model = models.ForeignKey(
         ModelConfig, on_delete=models.PROTECT, related_name="characters"
     )
+    voice_preset = models.CharField(max_length=32, default="shaonv")
     is_public = models.BooleanField(default=True)
     follow_count = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import AICharacter, ModelConfig, Follow
+from .voice_presets import PRESET_BY_KEY
 
 
 class ModelConfigSerializer(serializers.ModelSerializer):
@@ -19,7 +20,7 @@ class AICharacterListSerializer(serializers.ModelSerializer):
         fields = (
             "id", "name", "avatar", "description", "is_public",
             "follow_count", "creator_name", "model_name",
-            "is_followed", "created_at",
+            "is_followed", "voice_preset", "created_at",
         )
 
     def get_is_followed(self, obj):
@@ -34,6 +35,8 @@ class AICharacterDetailSerializer(serializers.ModelSerializer):
     model_name = serializers.CharField(source="model.model_name", read_only=True)
     model_provider = serializers.CharField(source="model.provider", read_only=True)
     is_followed = serializers.SerializerMethodField()
+    voice_label = serializers.SerializerMethodField()
+    voice_id = serializers.SerializerMethodField()
 
     class Meta:
         model = AICharacter
@@ -41,7 +44,8 @@ class AICharacterDetailSerializer(serializers.ModelSerializer):
             "id", "name", "avatar", "description", "personality",
             "system_prompt", "is_public", "follow_count",
             "creator_name", "model_name", "model_provider",
-            "is_followed", "created_at", "updated_at",
+            "is_followed", "voice_preset", "voice_label", "voice_id",
+            "created_at", "updated_at",
         )
         read_only_fields = ("id", "creator", "system_prompt",
                             "follow_count", "created_at", "updated_at")
@@ -52,13 +56,21 @@ class AICharacterDetailSerializer(serializers.ModelSerializer):
             return Follow.objects.filter(user=request.user, character=obj).exists()
         return False
 
+    def get_voice_label(self, obj):
+        preset = PRESET_BY_KEY.get(obj.voice_preset)
+        return preset["label"] if preset else ""
+
+    def get_voice_id(self, obj):
+        preset = PRESET_BY_KEY.get(obj.voice_preset)
+        return preset["voice_id"] if preset else ""
+
 
 class AICharacterCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = AICharacter
         fields = (
             "id", "name", "avatar", "description", "personality",
-            "model", "is_public",
+            "model", "voice_preset", "is_public",
         )
 
     def create(self, validated_data):

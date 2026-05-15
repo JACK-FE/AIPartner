@@ -21,6 +21,9 @@ export interface AICharacter {
   description: string
   personality?: string
   system_prompt?: string
+  voice_preset?: string
+  voice_label?: string
+  voice_id?: string
   is_public: boolean
   follow_count: number
   creator_name: string
@@ -51,6 +54,13 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   created_at: string
+}
+
+export interface VoicePreset {
+  key: string
+  label: string
+  gender: 'male' | 'female'
+  description: string
 }
 
 export interface PaginatedResponse<T> {

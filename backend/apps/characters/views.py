@@ -1,9 +1,12 @@
 import os
 import uuid
+import time
+import hashlib
 from django.conf import settings
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.views import APIView
 from django.db.models import Q
 from .models import AICharacter, ModelConfig, Follow
 from .serializers import (
@@ -13,6 +16,8 @@ from .serializers import (
     ModelConfigSerializer,
     FollowSerializer,
 )
+from .voice_presets import PRESET_BY_KEY
+from .tts.edge_tts import EdgeTTSProvider
 
 
 class IsCreatorOrReadOnly(permissions.BasePermission):
@@ -154,3 +159,110 @@ class CharacterAvatarUploadView(generics.GenericAPIView):
 
         url = request.build_absolute_uri(f"{settings.MEDIA_URL}{filename}")
         return Response({"avatar": url})
+
+
+def _cleanup_old_tts_files(tts_dir: str, max_age_seconds: int = 86400):
+    """清理超过 max_age_seconds 的 TTS 文件。"""
+    if not os.path.exists(tts_dir):
+        return
+    now = time.time()
+    for filename in os.listdir(tts_dir):
+        filepath = os.path.join(tts_dir, filename)
+        if os.path.isfile(filepath) and (now - os.path.getmtime(filepath)) > max_age_seconds:
+            try:
+                os.remove(filepath)
+            except OSError:
+                pass
+
+
+def _run_async(coro):
+    """在同步上下文中运行异步协程。"""
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop is not None and loop.is_running():
+        # 在已有事件循环中运行（如某些 ASGI 环境）
+        import concurrent.futures
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+        return future.result(timeout=120)
+    return asyncio.run(coro)
+
+
+class CharacterTTSView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request, character_id):
+        try:
+            character = AICharacter.objects.get(id=character_id)
+        except AICharacter.DoesNotExist:
+            return Response({"detail": "Character not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        text = request.data.get("text", "")
+        if not text:
+            return Response({"detail": "Text is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        preset_key = character.voice_preset
+        preset = PRESET_BY_KEY.get(preset_key, PRESET_BY_KEY["shaonv"])
+
+        tts_dir = os.path.join(settings.MEDIA_ROOT, "tts")
+        os.makedirs(tts_dir, exist_ok=True)
+        _cleanup_old_tts_files(tts_dir)
+
+        text_hash = hashlib.md5(f"{preset_key}:{text}".encode()).hexdigest()[:12]
+        filename = f"{int(time.time())}_{text_hash}.mp3"
+        filepath = os.path.join(tts_dir, filename)
+
+        provider = EdgeTTSProvider()
+        try:
+            audio_bytes = _run_async(provider.synthesize(text, preset_key))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {"detail": f"TTS synthesis failed: {e}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        with open(filepath, "wb") as f:
+            f.write(audio_bytes)
+
+        url = request.build_absolute_uri(f"{settings.MEDIA_URL}tts/{filename}")
+        return Response({"audio_url": url})
+
+
+class TTSPreviewView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request):
+        voice_preset = request.data.get("voice_preset", "shaonv")
+        text = request.data.get("text", "")
+        if not text:
+            return Response({"detail": "Text is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 用 preset key 而非硬编码 voice_id，让 provider 做动态匹配
+        tts_dir = os.path.join(settings.MEDIA_ROOT, "tts")
+        os.makedirs(tts_dir, exist_ok=True)
+        _cleanup_old_tts_files(tts_dir)
+
+        text_hash = hashlib.md5(f"{voice_preset}:{text}".encode()).hexdigest()[:12]
+        filename = f"preview_{int(time.time())}_{text_hash}.mp3"
+        filepath = os.path.join(tts_dir, filename)
+
+        provider = EdgeTTSProvider()
+        try:
+            audio_bytes = _run_async(provider.synthesize(text, voice_preset))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {"detail": f"TTS synthesis failed: {e}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        with open(filepath, "wb") as f:
+            f.write(audio_bytes)
+
+        url = request.build_absolute_uri(f"{settings.MEDIA_URL}tts/{filename}")
+        return Response({"audio_url": url})
