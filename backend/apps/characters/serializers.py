@@ -18,9 +18,9 @@ class AICharacterListSerializer(serializers.ModelSerializer):
     class Meta:
         model = AICharacter
         fields = (
-            "id", "name", "avatar", "description", "is_public",
+            "id", "name", "avatar", "description", "personality", "is_public",
             "follow_count", "creator_name", "model_name",
-            "is_followed", "voice_preset", "created_at",
+            "is_followed", "voice_preset", "model", "created_at",
         )
 
     def get_is_followed(self, obj):

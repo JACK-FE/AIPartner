@@ -3,7 +3,7 @@
     <n-h2>我创建的AI好友</n-h2>
 
     <div v-if="store.myCharacters.length || true" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px;">
-      <n-card hoverable @click="showCreateModal = true" style="cursor: pointer; min-height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+      <n-card hoverable @click="editingId = null; showCreateModal = true" style="cursor: pointer; min-height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
         <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 0;">
           <n-icon size="48" color="#18a058"><AddOutline /></n-icon>
           <div style="font-weight: 600; color: #18a058;">创建AI好友</div>
@@ -28,8 +28,8 @@
 
     <n-empty v-if="!store.myCharacters.length" description="还没有创建过AI好友，点击上方卡片开始创建吧" />
 
-    <n-modal v-model:show="showCreateModal" :mask-closable="false" preset="card" title="创建AI好友" style="width: 520px;">
-      <n-form :model="form" :rules="rules" @submit.prevent="handleCreate">
+    <n-modal v-model:show="showCreateModal" :mask-closable="false" preset="card" :title="editingId ? '编辑AI好友' : '创建AI好友'" style="width: 520px;">
+      <n-form :model="form" :rules="rules" @submit.prevent="handleSubmit">
         <n-form-item label="头像" path="avatar">
           <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
@@ -98,8 +98,8 @@
           <n-text style="margin-left: 8px;" depth="3">{{ form.is_public ? '公开 - 所有人可见' : '私密 - 仅自己可见' }}</n-text>
         </n-form-item>
         <div style="display: flex; gap: 12px; justify-content: flex-end;">
-          <n-button @click="showCreateModal = false">取消</n-button>
-          <n-button type="primary" attr-type="submit" :loading="creating">创建</n-button>
+          <n-button @click="showCreateModal = false; editingId = null">取消</n-button>
+          <n-button type="primary" attr-type="submit" :loading="creating">{{ editingId ? '保存' : '创建' }}</n-button>
         </div>
       </n-form>
     </n-modal>
@@ -123,6 +123,7 @@ const router = useRouter()
 const store = useCharacterStore()
 const message = useMessage()
 const creating = ref(false)
+const editingId = ref<number | null>(null)
 const showCreateModal = ref(false)
 
 const charAvatarInput = ref<HTMLInputElement | null>(null)
@@ -179,7 +180,7 @@ async function onCharAvatarUpload(e: Event) {
   input.value = ''
 }
 
-async function handleCreate() {
+async function handleSubmit() {
   creating.value = true
   try {
     let avatarUrl = form.value.avatar
@@ -193,14 +194,24 @@ async function handleCreate() {
       })
       avatarUrl = data.avatar
     }
-    await charactersApi.create({ ...form.value, avatar: avatarUrl } as any)
-    message.success('创建成功')
+    const wasEditing = !!editingId.value
+    if (editingId.value) {
+      await charactersApi.update(editingId.value, { ...form.value, avatar: avatarUrl } as any)
+      message.success('更新成功')
+    } else {
+      await charactersApi.create({ ...form.value, avatar: avatarUrl } as any)
+      message.success('创建成功')
+    }
     showCreateModal.value = false
-    form.value = { name: '', avatar: avatars[0], description: '', personality: '', voice_preset: DEFAULT_VOICE_PRESET, model: null, is_public: true }
-    customAvatarPreview.value = ''
+    editingId.value = null
+    if (!wasEditing) {
+      form.value = { name: '', avatar: avatars[0], description: '', personality: '', voice_preset: DEFAULT_VOICE_PRESET, model: null, is_public: true }
+      customAvatarPreview.value = ''
+    }
     await store.fetchMine()
   } catch (err: any) {
-    message.error(err.response?.data?.name?.[0] || '创建失败')
+    const action = editingId.value ? '更新' : '创建'
+    message.error(err.response?.data?.name?.[0] || `${action}失败`)
   } finally {
     creating.value = false
   }
@@ -217,6 +228,7 @@ async function deleteCharacter(id: number) {
 }
 
 function editCharacter(c: AICharacter) {
+  editingId.value = c.id
   showCreateModal.value = true
   form.value = {
     name: c.name,
@@ -224,10 +236,9 @@ function editCharacter(c: AICharacter) {
     description: c.description || '',
     personality: c.personality || '',
     voice_preset: c.voice_preset || DEFAULT_VOICE_PRESET,
-    model: null,
+    model: c.model ?? null,
     is_public: c.is_public,
   }
-  message.info('编辑功能可复用创建表单，当前仅预填数据')
 }
 
 async function previewVoice(presetKey: string) {

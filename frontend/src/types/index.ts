@@ -28,6 +28,7 @@ export interface AICharacter {
   follow_count: number
   creator_name: string
   model_name: string
+  model?: number
   model_provider?: string
   is_followed: boolean
   created_at: string
