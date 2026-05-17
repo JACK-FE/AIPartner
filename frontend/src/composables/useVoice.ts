@@ -18,10 +18,14 @@ export function useVoice() {
     }
   }
 
-  function playAudio(url: string) {
+  function playAudio(url: string, onEnded?: () => void) {
     if (!enabled.value) return
     stop()
     const audio = new Audio(url)
+    audio.onended = () => {
+      currentAudio = null
+      onEnded?.()
+    }
     audio.play().catch(() => {})
     currentAudio = audio
   }

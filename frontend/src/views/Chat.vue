@@ -21,6 +21,29 @@
         <div :style="{ maxWidth: '70%', padding: '10px 16px', borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: msg.role === 'user' ? '#18a058' : '#e8e8e8', color: msg.role === 'user' ? '#fff' : '#333' }">
           {{ msg.content }}
           <span v-if="msg.id === 0 && !msg.content" class="typing-dots"><i>.</i><i>.</i><i>.</i></span>
+          <span
+            v-if="msg.role === 'assistant' && msg.id !== 0 && msg.content"
+            style="display: inline-flex; align-items: center; margin-left: 4px; vertical-align: middle;"
+          >
+            <n-spin v-if="chatStore.audioState.get(msg.id) === 'loading'" :size="14" />
+            <span
+              v-else-if="chatStore.audioState.get(msg.id) === 'ready'"
+              @click.stop="handleReplay(msg)"
+              style="cursor: pointer; font-size: 14px; opacity: 0.7;"
+              title="重播语音"
+            >🔊</span>
+            <span
+              v-else-if="chatStore.audioState.get(msg.id) === 'playing'"
+              class="replay-icon-playing"
+              style="font-size: 14px;"
+            >🔊</span>
+            <span
+              v-else-if="chatStore.audioState.get(msg.id) === 'error'"
+              @click.stop="handleReplay(msg)"
+              style="cursor: pointer; font-size: 14px;"
+              title="重试"
+            >❌</span>
+          </span>
         </div>
       </div>
     </div>
@@ -50,11 +73,11 @@
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useChatStore } from '../stores/chat'
-import { charactersApi, ttsApi } from '../api/characters'
+import { charactersApi } from '../api/characters'
 import { useVoice } from '../composables/useVoice'
 import type { AICharacter } from '../types'
 
-import { NAvatar, NButton, NInput, NText, NEllipsis, useMessage } from 'naive-ui'
+import { NAvatar, NButton, NInput, NText, NEllipsis, NSpin, useMessage } from 'naive-ui'
 
 const route = useRoute()
 const chatStore = useChatStore()
@@ -64,6 +87,9 @@ const inputText = ref('')
 const msgContainer = ref<HTMLElement | null>(null)
 const characterId = Number(route.params.id)
 const voice = useVoice()
+
+// 注册 voice 实例到 store，供音频重播使用
+chatStore.setVoice(voice)
 
 // 快捷键模式
 const sendOnEnter = ref(localStorage.getItem('send_on_enter') !== 'false')
@@ -107,11 +133,24 @@ async function toggleFollow() {
   }
 }
 
+async function handleReplay(msg: { id: number; content: string }) {
+  const url = chatStore.audioUrls.get(msg.id)
+  if (url) {
+    // 已有缓存 URL，直接播放
+    chatStore.playMessageAudio(msg.id)
+  } else {
+    // 惰性请求 TTS，完成后自动播放
+    await chatStore.requestAudio(msg.id, msg.content, characterId)
+    chatStore.playMessageAudio(msg.id)
+  }
+}
+
 async function sendMessage() {
   const content = inputText.value.trim()
   if (!content || chatStore.streaming) return
   inputText.value = ''
   voice.stop()
+  chatStore.stopCurrent()
 
   chatStore.addMessage({ id: Date.now(), role: 'user', content, created_at: new Date().toISOString() })
   chatStore.streaming = true
@@ -165,9 +204,10 @@ async function sendMessage() {
     if (voice.enabled.value && character.value) {
       try {
         const fullText = chatStore.messages.filter(m => m.role === 'assistant').pop()?.content || ''
-        if (fullText) {
-          const { data } = await ttsApi.synthesize(characterId, fullText)
-          voice.playAudio(data.audio_url)
+        const lastMsg = chatStore.messages.filter(m => m.role === 'assistant').pop()
+        if (fullText && lastMsg && lastMsg.id !== 0) {
+          await chatStore.requestAudio(lastMsg.id, fullText, characterId)
+          chatStore.playMessageAudio(lastMsg.id)
         }
       } catch { /* TTS failed silently */ }
     }
@@ -213,8 +253,18 @@ onUnmounted(() => {
 .typing-dots i:nth-child(2) { animation-delay: 0.2s; }
 .typing-dots i:nth-child(3) { animation-delay: 0.4s; }
 
+.replay-icon-playing {
+  display: inline-block;
+  animation: replayBounce 0.6s ease-in-out infinite;
+}
+
 @keyframes dotBounce {
   0%, 80%, 100% { opacity: 0.2; transform: translateY(0); }
   40% { opacity: 1; transform: translateY(-3px); }
+}
+
+@keyframes replayBounce {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.6; }
 }
 </style>
