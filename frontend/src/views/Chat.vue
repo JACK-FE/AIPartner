@@ -4,7 +4,9 @@
       <n-avatar :src="character.avatar" :size="48" />
       <div style="flex: 1;">
         <div style="font-weight: 600;">{{ character.name }}</div>
-        <n-text depth="3" style="font-size: 12px;">{{ character.model_name }}</n-text>
+        <n-ellipsis :line-clamp="1" :tooltip="{ style: { maxWidth: '300px' } }" style="font-size: 12px; color: #999; max-width: 300px;">
+          {{ character.description || '暂无简介' }}
+        </n-ellipsis>
       </div>
       <n-button v-if="voice.supported.value" size="small" @click="voice.toggle()">
         {{ voice.enabled.value ? '🔊' : '🔇' }}
@@ -18,15 +20,27 @@
       <div v-for="msg in chatStore.messages" :key="msg.id || msg.created_at" :style="{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }">
         <div :style="{ maxWidth: '70%', padding: '10px 16px', borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: msg.role === 'user' ? '#18a058' : '#e8e8e8', color: msg.role === 'user' ? '#fff' : '#333' }">
           {{ msg.content }}
-          <div v-if="msg.id === 0" style="display: inline-block; margin-left: 4px;">
-            <n-spin size="small" />
-          </div>
+          <span v-if="msg.id === 0 && !msg.content" class="typing-dots"><i>.</i><i>.</i><i>.</i></span>
         </div>
       </div>
     </div>
 
     <div style="display: flex; gap: 8px; padding-top: 16px; border-top: 1px solid #eee;">
-      <n-input v-model:value="inputText" type="textarea" :rows="2" placeholder="输入消息..." @keyup.ctrl.enter="sendMessage" />
+      <n-input
+        v-model:value="inputText"
+        type="textarea"
+        :rows="2"
+        placeholder="输入消息..."
+        @keydown.enter="handleEnterKey"
+        @keydown.ctrl.enter.prevent="handleCtrlEnter"
+      />
+      <span
+        @click="toggleSendMode"
+        :title="sendOnEnter ? 'Enter 发送 / Ctrl+Enter 换行' : 'Enter 换行 / Ctrl+Enter 发送'"
+        style="align-self: flex-end; height: 34px; line-height: 34px; padding: 0 8px; cursor: pointer; color: #18a058; font-size: 15px; border-radius: 4px; user-select: none;"
+        @mouseenter="(e: MouseEvent) => (e.target as HTMLElement).style.background = '#f0faf4'"
+        @mouseleave="(e: MouseEvent) => (e.target as HTMLElement).style.background = 'transparent'"
+      >{{ sendOnEnter ? '↩\uFE0E' : '⌃↩\uFE0E' }}</span>
       <n-button type="primary" @click="sendMessage" :disabled="!inputText.trim() || chatStore.streaming" style="align-self: flex-end;">发送</n-button>
     </div>
   </div>
@@ -40,7 +54,7 @@ import { charactersApi, ttsApi } from '../api/characters'
 import { useVoice } from '../composables/useVoice'
 import type { AICharacter } from '../types'
 
-import { NAvatar, NButton, NInput, NSpin, NText, useMessage } from 'naive-ui'
+import { NAvatar, NButton, NInput, NText, NEllipsis, useMessage } from 'naive-ui'
 
 const route = useRoute()
 const chatStore = useChatStore()
@@ -50,6 +64,31 @@ const inputText = ref('')
 const msgContainer = ref<HTMLElement | null>(null)
 const characterId = Number(route.params.id)
 const voice = useVoice()
+
+// 快捷键模式
+const sendOnEnter = ref(localStorage.getItem('send_on_enter') !== 'false')
+
+function handleEnterKey(e: KeyboardEvent) {
+  if (e.ctrlKey) return
+  if (sendOnEnter.value) {
+    e.preventDefault()
+    sendMessage()
+  }
+}
+
+function handleCtrlEnter() {
+  if (sendOnEnter.value) {
+    inputText.value += '\n'
+  } else {
+    sendMessage()
+  }
+}
+
+function toggleSendMode() {
+  sendOnEnter.value = !sendOnEnter.value
+  localStorage.setItem('send_on_enter', String(sendOnEnter.value))
+  message.info(sendOnEnter.value ? 'Enter 发送 / Ctrl+Enter 换行' : 'Enter 换行 / Ctrl+Enter 发送')
+}
 
 async function toggleFollow() {
   if (!character.value) return
@@ -159,3 +198,23 @@ onUnmounted(() => {
   voice.stop()
 })
 </script>
+
+<style scoped>
+.typing-dots {
+  display: inline-block;
+  margin-left: 2px;
+  vertical-align: baseline;
+}
+.typing-dots i {
+  font-style: normal;
+  display: inline-block;
+  animation: dotBounce 1.4s infinite;
+}
+.typing-dots i:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots i:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dotBounce {
+  0%, 80%, 100% { opacity: 0.2; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-3px); }
+}
+</style>

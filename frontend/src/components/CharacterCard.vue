@@ -5,7 +5,7 @@
         <n-avatar :src="character.avatar" :size="80" fallback-src="https://api.dicebear.com/9.x/bottts/svg?seed=default" />
       </div>
     </template>
-    <n-ellipsis :line-clamp="2">
+    <n-ellipsis :line-clamp="2" :tooltip="{ style: { maxWidth: '280px' }, placement: 'bottom' }">
       {{ character.description || '暂无简介' }}
     </n-ellipsis>
     <template #footer>
